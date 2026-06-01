@@ -1,0 +1,41 @@
+{
+  "fonts": {
+    "body_cn": "宋体",
+    "body_en": "Times New Roman",
+    "heading1_cn": "黑体",
+    "heading2_cn": "黑体",
+    "heading3_cn": "楷体",
+    "caption_cn": "黑体",
+    "caption_en": "Times New Roman"
+  },
+  "sizes": {
+    "body": 12,
+    "heading1": 14,
+    "heading2": 12,
+    "heading3": 12,
+    "caption": 10.5,
+    "citation": 8,
+    "reference": 10.5,
+    "table_cell": 10.5
+  },
+  "page": {
+    "paper": "A4",
+    "margin_top": 2.54,
+    "margin_bottom": 2.54,
+    "margin_left": 3.17,
+    "margin_right": 3.17,
+    "orientation": "portrait"
+  },
+  "spacing": {
+    "body_line": 1.5,
+    "heading_before": 12,
+    "heading_after": 6,
+    "caption_before": 4,
+    "caption_after": 8
+  },
+  "table": {
+    "header_shading": "D9E2F3",
+    "border_color": "000000",
+    "border_size": "4"
+  }
+}
