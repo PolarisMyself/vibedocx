@@ -1,0 +1,29 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Claude Code
+.claude/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# vibedocx transactional backups
+*.vibedocx_backup
