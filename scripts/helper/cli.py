@@ -77,31 +77,41 @@ def _auto_output(args):
             args.output = _default_output_path(args.file)
 
 
+def _write_output(result, output_file):
+    """Write JSON result to stdout and optionally to a UTF-8 file."""
+    text = json.dumps(result, ensure_ascii=False, indent=2)
+    print(text)
+    if output_file:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(text)
+
+
 # ── Command handlers ──
 
 def cmd_inspect_structure(args):
     from helper.query import inspect_structure
-    print(json.dumps(inspect_structure(args.file), ensure_ascii=False, indent=2))
+    _write_output(inspect_structure(args.file), args.output_file)
 
 def cmd_inspect_styles(args):
     from helper.query import inspect_styles
-    print(json.dumps(inspect_styles(args.file, style_name=args.style), ensure_ascii=False, indent=2))
+    _write_output(inspect_styles(args.file, style_name=args.style), args.output_file)
 
 def cmd_inspect_formatting(args):
     from helper.query import inspect_formatting
-    print(json.dumps(inspect_formatting(args.file, range_start=args.range_start,
-        range_end=args.range_end, paragraph_index=args.paragraph), ensure_ascii=False, indent=2))
+    _write_output(inspect_formatting(args.file, range_start=args.range_start,
+        range_end=args.range_end, paragraph_index=args.paragraph), args.output_file)
 
 def cmd_inspect_content(args):
     from helper.query import inspect_content
-    print(json.dumps(inspect_content(args.file, range_start=args.range_start,
-        range_end=args.range_end, formatted=args.formatted), ensure_ascii=False, indent=2))
+    _write_output(inspect_content(args.file, range_start=args.range_start,
+        range_end=args.range_end, formatted=args.formatted), args.output_file)
 
 def cmd_format_style(args):
     from helper.style import format_style
     format_style(args.file, style_name=args.name, font=args.font, font_west=args.font_west,
         size=args.size, bold=args.bold, no_bold=args.no_bold, italic=args.italic,
-        no_italic=args.no_italic, align=args.align, line_spacing=args.line_spacing,
+        no_italic=args.no_italic, color=args.color, no_color=args.no_color,
+        align=args.align, line_spacing=args.line_spacing,
         space_before=args.space_before, space_after=args.space_after,
         indent_first=args.indent_first, output=args.output)
     print(f"Saved to {args.output}", file=sys.stderr)
@@ -122,8 +132,8 @@ def cmd_format_page(args):
 
 def cmd_select(args):
     from helper.query import select
-    print(json.dumps(select(args.file, _parse_json(args.filter, "filter"),
-        context_lines=args.context or 0), ensure_ascii=False, indent=2))
+    _write_output(select(args.file, _parse_json(args.filter, "filter"),
+        context_lines=args.context or 0), args.output_file)
 
 def cmd_replace_text(args):
     from helper.content import replace_text, replace_filtered
@@ -207,6 +217,12 @@ def cmd_create_structure(args):
         print("Error: provide --file or --json", file=sys.stderr); sys.exit(2)
     create_structure(args.output, structure)
     print(f"Created document from structure: {args.output}", file=sys.stderr)
+
+
+def cmd_create_from_template(args):
+    from helper.build import create_from_template
+    create_from_template(args.template, output=args.output)
+    print(f"Created from template: {args.output}", file=sys.stderr)
 
 def cmd_ref_add(args):
     from helper.cite import ref_add
@@ -382,25 +398,31 @@ def main():
     qs = qp.add_subparsers(dest="subcommand", required=True)
 
     p = qs.add_parser("structure", help="Document structure overview")
-    p.add_argument("file"); p.set_defaults(func=cmd_inspect_structure)
+    p.add_argument("file"); p.add_argument("--output-file", help="Write output to UTF-8 file")
+    p.set_defaults(func=cmd_inspect_structure)
 
     p = qs.add_parser("styles", help="List style definitions")
     p.add_argument("file"); p.add_argument("--style", help="Filter by style name")
+    p.add_argument("--output-file", help="Write output to UTF-8 file")
     p.set_defaults(func=cmd_inspect_styles)
 
     p = qs.add_parser("formatting", help="Paragraph formatting details")
     p.add_argument("file"); p.add_argument("--range-start", type=int)
     p.add_argument("--range-end", type=int); p.add_argument("--paragraph", type=int)
+    p.add_argument("--output-file", help="Write output to UTF-8 file")
     p.set_defaults(func=cmd_inspect_formatting)
 
     p = qs.add_parser("content", help="Read document content")
     p.add_argument("file"); p.add_argument("--range-start", type=int)
     p.add_argument("--range-end", type=int); p.add_argument("--formatted", action="store_true")
+    p.add_argument("--output-file", help="Write output to UTF-8 file")
     p.set_defaults(func=cmd_inspect_content)
 
     p = subparsers.add_parser("select", help="Query elements by filter")
     p.add_argument("file"); p.add_argument("--filter", required=True)
-    p.add_argument("--context", type=int); p.set_defaults(func=cmd_select)
+    p.add_argument("--context", type=int)
+    p.add_argument("--output-file", help="Write output to UTF-8 file")
+    p.set_defaults(func=cmd_select)
 
     # ── style (format) ──
     sp = subparsers.add_parser("format", help="Modify formatting")
@@ -412,6 +434,8 @@ def main():
     p.add_argument("--size", type=str); p.add_argument("--bold", action="store_true")
     p.add_argument("--no-bold", action="store_true"); p.add_argument("--italic", action="store_true")
     p.add_argument("--no-italic", action="store_true")
+    p.add_argument("--color", help="Font color as RGB hex (e.g., '000000')")
+    p.add_argument("--no-color", action="store_true", help="Remove font color")
     p.add_argument("--align", choices=["left", "center", "right", "justify"])
     p.add_argument("--line-spacing", type=float); p.add_argument("--space-before", type=float)
     p.add_argument("--space-after", type=float); p.add_argument("--indent-first", type=float)
@@ -510,6 +534,11 @@ def main():
     p = cs.add_parser("structure", help="Create from JSON structure")
     p.add_argument("-o", "--output", required=True); p.add_argument("--file")
     p.add_argument("--json"); p.set_defaults(func=cmd_create_structure)
+
+    p = cs.add_parser("from-template", help="Create blank doc from template")
+    p.add_argument("template", help="Template .docx path")
+    p.add_argument("-o", "--output", required=True)
+    p.set_defaults(func=cmd_create_from_template)
 
     # ── cite (ref) ──
     fp = subparsers.add_parser("ref", help="Reference management")

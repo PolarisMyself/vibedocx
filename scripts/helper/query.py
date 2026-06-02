@@ -66,8 +66,15 @@ def inspect_styles(file_path, style_name=None):
         info["italic"] = font.italic
         rpr = style.element.find(qn("w:rPr"))
         if rpr is not None:
+            color_el = rpr.find(qn("w:color"))
+            if color_el is not None:
+                info["color_rgb"] = color_el.get(qn("w:val"))
+                info["color_theme"] = color_el.get(qn("w:themeColor"))
             rfonts = rpr.find(qn("w:rFonts"))
             if rfonts is not None:
+                info["font_ascii"] = rfonts.get(qn("w:ascii"))
+                info["font_hAnsi"] = rfonts.get(qn("w:hAnsi"))
+                info["font_cn"] = rfonts.get(qn("w:eastAsia"))
                 ea = rfonts.get(qn("w:eastAsia"))
                 if ea:
                     info["font"] = ea

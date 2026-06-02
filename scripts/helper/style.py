@@ -12,6 +12,7 @@ from helper.units import parse_size, parse_indent
 
 def format_style(file_path, style_name, font=None, font_west=None, size=None,
                  bold=False, no_bold=False, italic=False, no_italic=False,
+                 color=None, no_color=False,
                  align=None, line_spacing=None, space_before=None, space_after=None,
                  indent_first=None, output=None):
     """Modify a named style's properties. Saves to output path."""
@@ -49,6 +50,17 @@ def format_style(file_path, style_name, font=None, font_west=None, size=None,
         style.font.italic = True
     elif no_italic:
         style.font.italic = False
+
+    # Color (w:color on rPr -- not exposed by python-docx style.font)
+    if color is not None or no_color:
+        rpr_c = style.element.get_or_add_rPr()
+        existing_colors = rpr_c.findall(qn("w:color"))
+        for ec in existing_colors:
+            rpr_c.remove(ec)
+        if color is not None and not no_color:
+            color_el = rpr_c.makeelement(qn("w:color"), {})
+            color_el.set(qn("w:val"), color)
+            rpr_c.append(color_el)
 
     # Paragraph properties (only for paragraph styles)
     if style.type == 1:  # paragraph style
@@ -286,10 +298,20 @@ def style_export(file_path, output_json):
 
         rpr = style.element.find(qn("w:rPr"))
         if rpr is not None:
+            # Color
+            color_el = rpr.find(qn("w:color"))
+            if color_el is not None:
+                info["color_rgb"] = color_el.get(qn("w:val"))
+                theme = color_el.get(qn("w:themeColor"))
+                if theme:
+                    info["color_theme"] = theme
+            # Fonts
             rfonts = rpr.find(qn("w:rFonts"))
             if rfonts is not None:
                 ea = rfonts.get(qn("w:eastAsia"))
                 if ea: info["font_cn"] = ea
+                ascii_font = rfonts.get(qn("w:ascii"))
+                if ascii_font: info["font_ascii"] = ascii_font
 
         if style.type == 1:
             pf = style.paragraph_format
@@ -349,6 +371,17 @@ def style_import(file_path, json_path, output):
         if "italic" in sdef:
             style.font.italic = sdef["italic"]
 
+        # Color import
+        if "color_rgb" in sdef:
+            rpr = style.element.get_or_add_rPr()
+            for existing in rpr.findall(qn("w:color")):
+                rpr.remove(existing)
+            color_el = rpr.makeelement(qn("w:color"), {})
+            color_el.set(qn("w:val"), sdef["color_rgb"])
+            if "color_theme" in sdef:
+                color_el.set(qn("w:themeColor"), sdef["color_theme"])
+            rpr.append(color_el)
+
         if style.type == 1:
             pf = style.paragraph_format
             if "align" in sdef:
@@ -359,6 +392,8 @@ def style_import(file_path, json_path, output):
                 pf.space_before = Pt(sdef["space_before"])
             if "space_after" in sdef:
                 pf.space_after = Pt(sdef["space_after"])
+            if "indent_first_pt" in sdef:
+                pf.first_line_indent = Pt(sdef["indent_first_pt"])
 
         count += 1
 

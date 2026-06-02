@@ -329,3 +329,51 @@ def create_structure(output, structure_json):
 
     doc.save(output)
     return output
+
+
+def create_from_template(template_path, output):
+    """Create a blank document that preserves all styles from a template.
+
+    Copies the template, strips all body content (paragraphs, tables),
+    clears headers/footers, and preserves styles, numbering definitions,
+    and page/section setup.
+
+    Args:
+        template_path: Path to template .docx file.
+        output: Output file path.
+
+    Returns:
+        Output file path (same as output arg).
+    """
+    import shutil
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    shutil.copy2(template_path, output)
+    doc = Document(output)
+    body = doc.element.body
+
+    # Capture section properties (preserves page setup)
+    sectPr = body.find(qn('w:sectPr'))
+
+    # Remove all body children
+    for child in list(body):
+        body.remove(child)
+
+    # Re-append section properties
+    if sectPr is not None:
+        body.append(sectPr)
+
+    # Clear headers/footers
+    for section in doc.sections:
+        for hf in (section.header, section.footer):
+            if hf is not None:
+                hf_elem = hf._element
+                for para in list(hf_elem.findall(qn('w:p'))):
+                    hf_elem.remove(para)
+                # Ensure at least one empty paragraph
+                empty_p = hf_elem.makeelement(qn('w:p'), {})
+                hf_elem.insert(0, empty_p)
+
+    doc.save(output)
+    return output
