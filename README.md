@@ -160,6 +160,30 @@ python -m pytest scripts/tests/ -v
 - python-docx 高层 API + lxml XML 补丁，覆盖原生库不支持的脚注、域等功能
 - 三级配置：Skill 默认 → 项目 `.vibedocx/style.json` → CLI 参数
 
+## 中文兼容性
+
+### 终端编码
+
+Windows PowerShell 默认代码页非 UTF-8，可能在输出含中文字符的 JSON 时出现乱码。解决方案：
+
+- 使用 `--output-file` 参数将结果写入 UTF-8 文件：`vibedocx inspect styles file.docx --output-file result.json`
+- 设置终端代码页：`chcp 65001`
+- 设置环境变量：`$env:PYTHONIOENCODING='utf-8'`
+
+### 中文排版约定
+
+vibedocx 默认按照中文学术排版规范配置（正文宋体、标题黑体、A4 纸张、首行缩进两字）。以下排版细节由用户根据具体需求自行配置：
+
+| 需求 | 配置方式 |
+|---|---|
+| 中文字体 | `config.json` → `styles.fonts.body_cn` |
+| 英文字体 | `config.json` → `styles.fonts.body_en` |
+| 字号 | `config.json` → `styles.sizes`，支持中文字号名（`小四`、`三号` 等） |
+| 纸张与页边距 | `config.json` → `styles.page` |
+| 引号风格（`""` vs `「」`） | 用户在文档中使用对应字符即可 |
+| 全角/半角标点偏好 | 用户在文档中使用对应字符即可 |
+| 图表标题样式 | `vibedocx format style <file> --name "caption" ...` |
+
 ## License
 
 [MIT](LICENSE.txt)

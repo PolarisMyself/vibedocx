@@ -161,7 +161,7 @@ def cmd_replace_bookmark(args):
 
 def cmd_field_list(args):
     from helper.field import field_list
-    print(json.dumps(field_list(args.file, field_type=args.type), ensure_ascii=False, indent=2))
+    _write_output(field_list(args.file, field_type=args.type), args.output_file)
 
 def cmd_field_update(args):
     from helper.field import field_update
@@ -243,7 +243,7 @@ def cmd_ref_cite(args):
 
 def cmd_ref_list(args):
     from helper.cite import ref_list
-    print(json.dumps(ref_list(args.file), ensure_ascii=False, indent=2))
+    _write_output(ref_list(args.file), args.output_file)
 
 def cmd_ref_generate(args):
     from helper.cite import ref_generate
@@ -422,6 +422,12 @@ def cmd_style_import(args):
 # ──────────────────────────────────────────────
 
 def main():
+    # Ensure UTF-8 output on terminals that default to legacy code pages
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
     parser = argparse.ArgumentParser(prog="vibedocx",
         description="DOCX formatting and field management CLI tool.")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -600,7 +606,9 @@ def main():
     p.add_argument("-o", "--output"); p.set_defaults(func=cmd_ref_cite)
 
     p = fs.add_parser("list", help="List references and citations")
-    p.add_argument("file"); p.set_defaults(func=cmd_ref_list)
+    p.add_argument("file")
+    p.add_argument("--output-file", help="Write output to UTF-8 file")
+    p.set_defaults(func=cmd_ref_list)
 
     p = fs.add_parser("generate", help="Generate bibliography section")
     p.add_argument("file"); p.add_argument("--heading", default="参考文献")
@@ -622,6 +630,7 @@ def main():
 
     p = flds.add_parser("list", help="List all fields")
     p.add_argument("file"); p.add_argument("--type")
+    p.add_argument("--output-file", help="Write output to UTF-8 file")
     p.set_defaults(func=cmd_field_list)
 
     p = flds.add_parser("update", help="Update a field's instruction")

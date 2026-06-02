@@ -84,9 +84,9 @@ def _apply_styles(doc, styles_def):
             if 'space_after' in props:
                 pf.space_after = Pt(props['space_after'])
             if 'indent_first' in props:
-                # Convert char count to points (approximate)
+                # Convert char count to points (1 char = 1 font-size in pt)
                 fs = props.get('size', 12)
-                pf.first_line_indent = Pt(props['indent_first'] * fs * 0.35)
+                pf.first_line_indent = Pt(props['indent_first'] * fs)
 
 
 def _add_page_break(doc):
@@ -204,6 +204,13 @@ def create_blank(output, paper='A4', margin_top=2.54, margin_bottom=2.54,
     Returns the output path.
     """
     doc = Document()
+
+    # Set Chinese as east-Asian document language (default template uses ja-JP)
+    settings = doc.settings._element
+    theme_font_lang = settings.find(qn('w:themeFontLang'))
+    if theme_font_lang is not None:
+        theme_font_lang.set(qn('w:eastAsia'), 'zh-CN')
+
     section = doc.sections[0]
 
     # Paper
