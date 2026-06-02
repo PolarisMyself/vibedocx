@@ -614,23 +614,102 @@ def table_add_row(file_path, table_index, data=None, output=None):
     return 1
 
 
-def table_add_column(file_path, table_index, header=None, output=None):
-    """Add a column to a table."""
+def table_add_column(file_path, table_index, header=None, width=None,
+                     strategy="split", output=None):
+    """Add a column to a table.
+
+    Properly updates tblGrid (gridCol) and sets column width. For tables
+    with merged cells, strategy controls behavior.
+
+    Args:
+        file_path: Input .docx path.
+        table_index: 0-based table index.
+        header: Optional header text for the new column.
+        width: Column width in cm (float). Default None = auto-calculate
+               from average of existing columns.
+        strategy: For merged cells:
+            "split" — Break gridSpan at the new column position (default).
+            "expand" — Grow gridSpan of merged cells by 1 to include new column.
+            "refuse" — Raise ValueError if any row has a merged cell at the
+                       new column position.
+    """
     from lxml import etree
+    from docx.shared import Cm, Emu
+
     doc = Document(file_path)
     tables = doc.tables
     if table_index < 0 or table_index >= len(tables):
-        raise ValueError(f"Table index {table_index} out of range")
+        raise ValueError(f"Table index {table_index} out of range (0-{len(tables)-1})")
     table = tables[table_index]
     tbl = table._tbl
-    # For each row, add a new <w:tc>
-    for i, tr in enumerate(tbl.findall(qn('w:tr'))):
+    tr_list = tbl.findall(qn('w:tr'))
+    gridCols = tbl.tblGrid.findall(qn('w:gridCol'))
+
+    # Calculate default width from existing gridCols
+    if width is not None:
+        col_width = Cm(width)
+    elif gridCols:
+        total_emu = 0
+        for gc in gridCols:
+            w_val = gc.get(qn('w:w'))
+            if w_val:
+                total_emu += int(w_val)
+        col_width = Emu(total_emu // max(len(gridCols), 1))
+    else:
+        col_width = Cm(2.5)
+
+    # Add new gridCol (fixes the primary bug: gridCol was never added)
+    new_gridCol = etree.SubElement(tbl.tblGrid, qn('w:gridCol'))
+    new_gridCol.set(qn('w:w'), str(int(col_width.emu)))
+
+    # Process each row
+    new_col_pos = len(gridCols)  # new column is appended at the end
+
+    for i, tr in enumerate(tr_list):
+        tc_elements = tr.findall(qn('w:tc'))
+        # Calculate grid offset for this row
+        offset = 0
+        for tc in tc_elements:
+            tcPr = tc.find(qn('w:tcPr'))
+            span = 1
+            if tcPr is not None:
+                gs = tcPr.find(qn('w:gridSpan'))
+                if gs is not None:
+                    span = int(gs.get(qn('w:val')))
+            tc_end = offset + span
+
+            if offset <= new_col_pos < tc_end and i > 0:
+                # New column intersects this merged cell
+                if strategy == "refuse" and span > 1:
+                    raise ValueError(
+                        f"New column at position {new_col_pos} intersects a "
+                        f"merged cell (gridSpan={span}) in row {i}. "
+                        f"Use --strategy split or expand.")
+                elif strategy == "split" and span > 1:
+                    # Reduce gridSpan to make room for the new column
+                    new_span = span - 1
+                    if new_span <= 1:
+                        if gs is not None:
+                            tcPr.remove(gs)
+                    else:
+                        gs.set(qn('w:val'), str(new_span))
+                elif strategy == "expand" and span > 1:
+                    gs.set(qn('w:val'), str(span + 1))
+
+            offset = tc_end
+
+        # Append new tc to this row
         tc = etree.SubElement(tr, qn('w:tc'))
+        tcPr_el = etree.SubElement(tc, qn('w:tcPr'))
+        tcW = etree.SubElement(tcPr_el, qn('w:tcW'))
+        tcW.set(qn('w:w'), str(int(col_width.emu)))
+        tcW.set(qn('w:type'), 'dxa')
         p = etree.SubElement(tc, qn('w:p'))
         if header and i == 0:
             r = etree.SubElement(p, qn('w:r'))
             t = etree.SubElement(r, qn('w:t'))
             t.text = header
+
     doc.save(output)
     return 1
 
@@ -646,6 +725,253 @@ def table_merge_cells(file_path, table_index, row_start, col_start,
     cell_start = table.cell(row_start, col_start)
     cell_end = table.cell(row_end, col_end)
     cell_start.merge(cell_end)
+    doc.save(output)
+    return 1
+
+
+def table_format_cell(file_path, table_index, row, col,
+                      font_cn=None, font_en=None, size=None,
+                      bold=None, italic=None,
+                      align=None, vertical_align=None,
+                      shading=None, width=None,
+                      output=None):
+    """Format a specific table cell.
+
+    Args:
+        file_path: Input .docx path.
+        table_index: 0-based table index.
+        row: 0-based row index.
+        col: 0-based column index.
+        font_cn: East Asian font name.
+        font_en: Western font name.
+        size: Font size (pt or Chinese name like "小四").
+        bold: True/False/None (None = no change).
+        italic: True/False/None.
+        align: Horizontal alignment ("left", "center", "right", "justify").
+        vertical_align: "top", "center", "bottom".
+        shading: Hex fill color (e.g. "D9E2F3").
+        width: Cell width in cm (float).
+        output: Output file path.
+    """
+    from docx.shared import Cm
+    from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+    from helper.config import ALIGN_MAP
+    from helper.units import parse_size
+
+    doc = Document(file_path)
+    tables = doc.tables
+    if table_index < 0 or table_index >= len(tables):
+        raise ValueError(f"Table index {table_index} out of range (0-{len(tables)-1})")
+    table = tables[table_index]
+    cell = table.cell(row, col)
+
+    # Width
+    if width is not None:
+        cell.width = Cm(width)
+
+    # Vertical alignment
+    if vertical_align is not None:
+        v_map = {"top": WD_CELL_VERTICAL_ALIGNMENT.TOP,
+                 "center": WD_CELL_VERTICAL_ALIGNMENT.CENTER,
+                 "bottom": WD_CELL_VERTICAL_ALIGNMENT.BOTTOM}
+        va = v_map.get(vertical_align)
+        if va is not None:
+            cell.vertical_alignment = va
+
+    # Shading
+    if shading is not None:
+        tcPr = cell._element.get_or_add_tcPr()
+        existing = tcPr.find(qn('w:shd'))
+        if existing is not None:
+            tcPr.remove(existing)
+        from lxml import etree
+        shd = etree.SubElement(tcPr, qn('w:shd'))
+        shd.set(qn('w:fill'), shading)
+        shd.set(qn('w:val'), 'clear')
+
+    # Font and alignment on cell paragraphs
+    for para in cell.paragraphs:
+        if align is not None:
+            para.alignment = ALIGN_MAP.get(align)
+
+        for run in para.runs:
+            if font_cn or font_en:
+                rPr = run._element.get_or_add_rPr()
+                rFonts = rPr.find(qn('w:rFonts'))
+                if rFonts is None:
+                    from lxml import etree
+                    rFonts = etree.SubElement(rPr, qn('w:rFonts'))
+                if font_cn:
+                    rFonts.set(qn('w:eastAsia'), font_cn)
+                if font_en:
+                    rFonts.set(qn('w:ascii'), font_en)
+                    rFonts.set(qn('w:hAnsi'), font_en)
+                if font_cn and not font_en:
+                    rFonts.set(qn('w:ascii'), font_cn)
+                    rFonts.set(qn('w:hAnsi'), font_cn)
+            if size is not None:
+                run.font.size = parse_size(size)
+            if bold is not None:
+                run.bold = bold
+            if italic is not None:
+                run.italic = italic
+
+    doc.save(output)
+    return 1
+
+
+def table_delete_row(file_path, table_index, row_index, output=None):
+    """Delete a row from a table. Content in merged cells cascades down.
+
+    If the deleted row contains a vMerge="restart" cell, its content is
+    moved to the next row's continue cell (which becomes the new restart).
+    If the row contains only vMerge="continue" cells, the row is simply
+    removed; the restart cell above keeps its content.
+
+    Raises ValueError if the table has only one row.
+    """
+    from lxml import etree
+    doc = Document(file_path)
+    tables = doc.tables
+    if table_index < 0 or table_index >= len(tables):
+        raise ValueError(f"Table index {table_index} out of range (0-{len(tables)-1})")
+    table = tables[table_index]
+    tbl = table._tbl
+    tr_list = tbl.findall(qn('w:tr'))
+    if row_index < 0 or row_index >= len(tr_list):
+        raise ValueError(f"Row index {row_index} out of range (0-{len(tr_list)-1})")
+    if len(tr_list) <= 1:
+        raise ValueError("Cannot delete the last row of a table; use table delete instead")
+
+    tr = tr_list[row_index]
+    tcs = tr.findall(qn('w:tc'))
+
+    # Check for vMerge=restart cells and cascade content
+    next_tr = tr_list[row_index + 1] if row_index + 1 < len(tr_list) else None
+    for i, tc in enumerate(tcs):
+        tcPr = tc.find(qn('w:tcPr'))
+        vmerge_el = tcPr.find(qn('w:vMerge')) if tcPr is not None else None
+        vm_val = vmerge_el.get(qn('w:val')) if vmerge_el is not None else None
+
+        if vm_val == 'restart' and next_tr is not None:
+            # Find the corresponding continue cell in the next row
+            next_tcs = next_tr.findall(qn('w:tc'))
+            if i < len(next_tcs):
+                next_tc = next_tcs[i]
+                next_tcPr = next_tc.find(qn('w:tcPr'))
+                next_vmerge = next_tcPr.find(qn('w:vMerge')) if next_tcPr is not None else None
+                next_vm = next_vmerge.get(qn('w:val')) if next_vmerge is not None else None
+                if next_vm == 'continue':
+                    # Copy content from restart to continue cell
+                    for child in list(next_tc):
+                        if child.tag != qn('w:tcPr'):
+                            next_tc.remove(child)
+                    for child in list(tc):
+                        if child.tag != qn('w:tcPr'):
+                            tc.remove(child)
+                            next_tc.append(child)
+                    # Promote continue → restart
+                    next_vmerge.set(qn('w:val'), 'restart')
+
+    tbl.remove(tr)
+    doc.save(output)
+    return 1
+
+
+def table_delete_column(file_path, table_index, col_index,
+                        strategy="shrink", output=None):
+    """Delete a column from a table.
+
+    Args:
+        file_path: Input .docx path.
+        table_index: 0-based table index.
+        col_index: 0-based grid column index to delete.
+        strategy:
+            "shrink" — cells spanning this column reduce gridSpan by 1 (default).
+                       Content stays in the remaining (narrower) merged cell.
+            "refuse" — raise ValueError if any cell intersecting this column
+                       has gridSpan > 1 or vMerge set.
+
+    Raises ValueError if the table has only one column with shrink strategy
+    and no merged cells to absorb the deletion.
+    """
+    doc = Document(file_path)
+    tables = doc.tables
+    if table_index < 0 or table_index >= len(tables):
+        raise ValueError(f"Table index {table_index} out of range (0-{len(tables)-1})")
+    table = tables[table_index]
+    tbl = table._tbl
+    tr_list = tbl.findall(qn('w:tr'))
+    col_count = tbl.col_count
+
+    if col_index < 0 or col_index >= col_count:
+        raise ValueError(f"Column index {col_index} out of range (0-{col_count-1})")
+
+    # Pre-scan for strategy validation
+    for tr in tr_list:
+        tc_elements = tr.findall(qn('w:tc'))
+        offset = tr.grid_before
+        for tc in tc_elements:
+            tcPr = tc.find(qn('w:tcPr'))
+            span = 1
+            if tcPr is not None:
+                gs = tcPr.find(qn('w:gridSpan'))
+                if gs is not None:
+                    span = int(gs.get(qn('w:val')))
+                vm = tcPr.find(qn('w:vMerge'))
+                vm_val = vm.get(qn('w:val')) if vm is not None else None
+            else:
+                vm_val = None
+
+            tc_end = offset + span
+            if offset <= col_index < tc_end:
+                if strategy == "refuse" and (span > 1 or vm_val is not None):
+                    raise ValueError(
+                        f"Column {col_index} intersects a merged cell "
+                        f"(grid_span={span}, vMerge={vm_val}). Use --strategy shrink to shrink "
+                        f"the merged region or handle manually.")
+            offset = tc_end
+
+    # Process each row
+    for tr in tr_list:
+        tc_elements = tr.findall(qn('w:tc'))
+        offset = tr.grid_before
+        for tc in list(tc_elements):
+            tcPr = tc.find(qn('w:tcPr'))
+            span = 1
+            if tcPr is not None:
+                gs = tcPr.find(qn('w:gridSpan'))
+                if gs is not None:
+                    span = int(gs.get(qn('w:val')))
+            tc_end = offset + span
+
+            if offset <= col_index < tc_end:
+                if strategy == "shrink":
+                    if span > 1:
+                        # Reduce gridSpan: n → n-1
+                        new_span = span - 1
+                        if new_span <= 1:
+                            if tcPr is not None and gs is not None:
+                                tcPr.remove(gs)
+                        else:
+                            if tcPr is None:
+                                tcPr = tc.makeelement(qn('w:tcPr'), {})
+                                tc.insert(0, tcPr)
+                            if gs is None:
+                                gs = tc.makeelement(qn('w:gridSpan'), {})
+                                tcPr.append(gs)
+                            gs.set(qn('w:val'), str(new_span))
+                    else:
+                        # span == 1: remove the cell entirely
+                        tr.remove(tc)
+                break  # only one cell per row spans this column
+            offset = tc_end
+
+    # Remove the gridCol
+    gridCols = tbl.tblGrid.findall(qn('w:gridCol'))
+    if col_index < len(gridCols):
+        tbl.tblGrid.remove(gridCols[col_index])
+
     doc.save(output)
     return 1
 

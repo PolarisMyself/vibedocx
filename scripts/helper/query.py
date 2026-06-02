@@ -216,3 +216,55 @@ def select(file_path, filter_spec, context_lines=0):
             ]
         matches.append(m)
     return {"total_matches": len(matches), "matches": matches}
+
+
+def inspect_table(file_path, table_index=None):
+    """Return table structure and cell content.
+
+    Iterates tables via python-docx's row.cells (which correctly expands
+    merged cells to the virtual grid) and reports cell text, grid_span,
+    and vMerge status.
+
+    Args:
+        file_path: Path to .docx file.
+        table_index: If specified (0-indexed), return that table only.
+                     Otherwise return all tables.
+
+    Returns:
+        dict with "tables" list. Each table: index, rows, cols, cells[].
+        Each cell: row, col, text, grid_span, v_merge.
+    """
+    doc = Document(file_path)
+    tables = []
+
+    indices = [table_index] if table_index is not None else range(len(doc.tables))
+    for ti in indices:
+        if ti < 0 or ti >= len(doc.tables):
+            continue
+        table = doc.tables[ti]
+        tbl = table._tbl
+        col_count = tbl.col_count
+        cells = []
+
+        for ri, row in enumerate(table.rows):
+            for ci, cell in enumerate(row.cells):
+                # Deduplicate: row.cells expands gridSpan by repeating the
+                # same _Cell reference; only record first occurrence.
+                if ci > 0 and row.cells[ci] is row.cells[ci - 1]:
+                    continue
+                cells.append({
+                    "row": ri,
+                    "col": ci,
+                    "text": cell.text,
+                    "grid_span": cell.grid_span,
+                    "v_merge": cell._tc.vMerge,
+                })
+
+        tables.append({
+            "index": ti,
+            "rows": len(table.rows),
+            "cols": col_count,
+            "cells": cells,
+        })
+
+    return {"tables": tables} if table_index is None else {"tables": tables}

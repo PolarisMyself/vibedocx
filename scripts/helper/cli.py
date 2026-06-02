@@ -106,6 +106,11 @@ def cmd_inspect_content(args):
     _write_output(inspect_content(args.file, range_start=args.range_start,
         range_end=args.range_end, formatted=args.formatted), args.output_file)
 
+
+def cmd_inspect_table(args):
+    from helper.query import inspect_table
+    _write_output(inspect_table(args.file, table_index=args.table), args.output_file)
+
 def cmd_format_style(args):
     from helper.style import format_style
     format_style(args.file, style_name=args.name, font=args.font, font_west=args.font_west,
@@ -285,7 +290,8 @@ def cmd_table_add_row(args):
 
 def cmd_table_add_column(args):
     from helper.content import table_add_column
-    table_add_column(args.file, table_index=args.table, header=args.header, output=args.output)
+    table_add_column(args.file, table_index=args.table, header=args.header,
+                     width=args.width, strategy=args.strategy, output=args.output)
     print(f"Added column to table {args.table}, saved to {args.output}", file=sys.stderr)
 
 def cmd_table_merge(args):
@@ -294,6 +300,36 @@ def cmd_table_merge(args):
                       row_start=args.row_start, col_start=args.col_start,
                       row_end=args.row_end, col_end=args.col_end, output=args.output)
     print(f"Merged cells in table {args.table}, saved to {args.output}", file=sys.stderr)
+
+
+def cmd_table_delete_row(args):
+    from helper.content import table_delete_row
+    table_delete_row(args.file, table_index=args.table,
+                     row_index=args.row, output=args.output)
+    print(f"Deleted row {args.row} from table {args.table}, saved to {args.output}", file=sys.stderr)
+
+
+def cmd_table_delete_column(args):
+    from helper.content import table_delete_column
+    table_delete_column(args.file, table_index=args.table,
+                        col_index=args.col, strategy=args.strategy,
+                        output=args.output)
+    print(f"Deleted column {args.col} from table {args.table}, saved to {args.output}", file=sys.stderr)
+
+
+def cmd_table_format_cell(args):
+    from helper.content import table_format_cell
+    bold = True if args.bold else (False if args.no_bold else None)
+    italic = True if args.italic else (False if args.no_italic else None)
+    table_format_cell(args.file, table_index=args.table,
+                      row=args.row, col=args.col,
+                      font_cn=args.font_cn, font_en=args.font_en,
+                      size=args.size, bold=bold, italic=italic,
+                      align=args.align, vertical_align=args.vertical_align,
+                      shading=args.shading, width=args.width,
+                      output=args.output)
+    print(f"Formatted cell ({args.row},{args.col}) in table {args.table}, saved to {args.output}",
+          file=sys.stderr)
 
 def cmd_xref_insert(args):
     from helper.content import xref_insert
@@ -417,6 +453,11 @@ def main():
     p.add_argument("--range-end", type=int); p.add_argument("--formatted", action="store_true")
     p.add_argument("--output-file", help="Write output to UTF-8 file")
     p.set_defaults(func=cmd_inspect_content)
+
+    p = qs.add_parser("table", help="Inspect table structure and cells")
+    p.add_argument("file"); p.add_argument("--table", type=int, help="Table index (0-based)")
+    p.add_argument("--output-file", help="Write output to UTF-8 file")
+    p.set_defaults(func=cmd_inspect_table)
 
     p = subparsers.add_parser("select", help="Query elements by filter")
     p.add_argument("file"); p.add_argument("--filter", required=True)
@@ -660,6 +701,9 @@ def main():
     p = tbs.add_parser("add-column", help="Add a column")
     p.add_argument("file"); p.add_argument("--table", type=int, required=True)
     p.add_argument("--header", help="Header text")
+    p.add_argument("--width", type=float, help="Column width in cm")
+    p.add_argument("--strategy", choices=["split", "expand", "refuse"], default="split",
+                   help="split: break merged cells (default). expand: grow merges. refuse: error on merges")
     p.add_argument("-o", "--output"); p.set_defaults(func=cmd_table_add_column)
 
     p = tbs.add_parser("merge", help="Merge cells")
@@ -669,6 +713,33 @@ def main():
     p.add_argument("--row-end", type=int, required=True)
     p.add_argument("--col-end", type=int, required=True)
     p.add_argument("-o", "--output"); p.set_defaults(func=cmd_table_merge)
+
+    p = tbs.add_parser("delete-row", help="Delete a table row")
+    p.add_argument("file"); p.add_argument("--table", type=int, required=True)
+    p.add_argument("--row", type=int, required=True, help="Row index to delete (0-based)")
+    p.add_argument("-o", "--output"); p.set_defaults(func=cmd_table_delete_row)
+
+    p = tbs.add_parser("delete-column", help="Delete a table column")
+    p.add_argument("file"); p.add_argument("--table", type=int, required=True)
+    p.add_argument("--col", type=int, required=True, help="Column index to delete (0-based)")
+    p.add_argument("--strategy", choices=["shrink", "refuse"], default="shrink",
+                   help="shrink: reduce gridSpan on merged cells (default). refuse: error on merged cells")
+    p.add_argument("-o", "--output"); p.set_defaults(func=cmd_table_delete_column)
+
+    p = tbs.add_parser("format-cell", help="Format a table cell")
+    p.add_argument("file"); p.add_argument("--table", type=int, required=True)
+    p.add_argument("--row", type=int, required=True, help="Row index (0-based)")
+    p.add_argument("--col", type=int, required=True, help="Column index (0-based)")
+    p.add_argument("--font-cn", help="East Asian font")
+    p.add_argument("--font-en", help="Western font")
+    p.add_argument("--size", type=str, help="Font size (e.g. 12, '小四')")
+    p.add_argument("--bold", action="store_true"); p.add_argument("--no-bold", action="store_true")
+    p.add_argument("--italic", action="store_true"); p.add_argument("--no-italic", action="store_true")
+    p.add_argument("--align", choices=["left", "center", "right", "justify"])
+    p.add_argument("--vertical-align", choices=["top", "center", "bottom"])
+    p.add_argument("--shading", help="Hex fill color (e.g. D9E2F3)")
+    p.add_argument("--width", type=float, help="Cell width in cm")
+    p.add_argument("-o", "--output"); p.set_defaults(func=cmd_table_format_cell)
 
     # ── xref ──
     xrp = subparsers.add_parser("xref", help="Cross-reference operations")
