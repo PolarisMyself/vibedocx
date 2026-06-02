@@ -6,8 +6,9 @@ description: >
   Use when the user wants to: create .docx from scratch, format documents
   (fonts, styles, spacing, alignment), inspect structure/styles/content,
   manage citations and bibliographies, insert tables/images/TOC/equations/
-  footnotes, or do find-and-replace / block operations. Triggers on: "docx",
-  "Word文档", "论文", "报告", "模板", "排版", "参考文献".
+  footnotes, or do find-and-replace / block operations. 
+Triggers: 
+  "docx", "Word文档", "论文", "报告", "模板", "排版", "参考文献".
   For PDF export, comments, or tracked changes, use the docx skill.
 license: MIT. See LICENSE.txt for complete terms.
 ---
