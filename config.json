@@ -1,0 +1,24 @@
+{
+  "python": "",
+  "user": {
+    "name": "",
+    "institution": "",
+    "email": ""
+  },
+  "styles": {
+    "fonts": {
+      "body_cn": "宋体",
+      "body_en": "Times New Roman"
+    },
+    "sizes": {
+      "body": 12,
+      "heading1": 14
+    },
+    "page": {
+      "paper": "A4"
+    },
+    "spacing": {
+      "body_line": 1.5
+    }
+  }
+}

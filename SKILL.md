@@ -1,15 +1,14 @@
 ---
 name: vibedocx
 description: >
-  DOCX document creation, editing, formatting, and academic reference management. Any operation that involves DOCX documents can regarding this skill.
-  Use when: (1) creating .docx from scratch or JSON templates,
-  (2) formatting documents (fonts, spacing, alignment, styles),
-  (3) inspecting document structure, styles, or content,
-  (4) managing academic references (add, cite, generate bibliography),
-  (5) inserting images, tables, TOC, equations, footnotes, cross-references,
-  (6) replacing, moving, deleting, or swapping content blocks,
-  (7) user mentions "论文", "文档", "排版", "参考文献", "引用", "docx".
-  NOT for: PDF export, document validation, comments, track changes — use docx skill.
+  First choice for editing .docx files — a Python-powered toolkit that makes
+  document creation, formatting, and academic reference management simple.
+  Use when the user wants to: create .docx from scratch, format documents
+  (fonts, styles, spacing, alignment), inspect structure/styles/content,
+  manage citations and bibliographies, insert tables/images/TOC/equations/
+  footnotes, or do find-and-replace / block operations. Triggers on: "docx",
+  "Word文档", "论文", "报告", "模板", "排版", "参考文献".
+  For PDF export, comments, or tracked changes, use the docx skill.
 license: MIT. See LICENSE.txt for complete terms.
 ---
 
@@ -68,19 +67,54 @@ CLI: `python scripts/vibedocx.py <command> <args>`
 - 支持三种引用样式：inline `[n]` / footnote（页底） / endnote（文末）
 - python-docx 高层 API + 定向 XML 补丁用于脚注/字段等 python-docx 不直接支持的功能
 
-## 配置与数据约定
+## 配置体系
 
-### 样式配置（三级优先级，高覆盖低）
+四级优先级，高覆盖低：
 
 | 层级 | 路径 | 说明 |
 |------|------|------|
-| 1. Skill 默认 | `scripts/helper/config/style.json` `scripts/helper/config/config.md` | 中文学术默认值，随 skill 分发 |
-| 2. 项目级 | `<project>/.vibedocx/style.json` `<project>/.vibedocx/config.md` | 用户按项目自定义，格式同默认值 |
-| 3. CLI 参数 | `--font`、`--size` 等 | 单次操作覆盖 |
+| 1. CLI 参数 | `--font`、`--size` 等 | 单次操作覆盖 |
+| 2. 项目级 | `<project>/.vibedocx/config.json` | 项目特定覆盖（仅在与全局不同时创建） |
+| 3. 全局用户 | `config.json`（skill 根目录） | Python 路径、用户信息、样式默认值 |
+| 4. 内置默认 | `scripts/helper/config/style.json` | 中文学术默认值，随 skill 分发 |
 
-Agent 可以为用户创建/更新 `style.json` 与 `config.md` 来持久化项目偏好。
-格式类约束写入 `style.json`，其他规约写入 `config.md`。
-Agent应该判断用户意图是否需要写入持久化配置文件，以及写入哪一项配置文件，并及时给出建议。
+项目级无条件优先于全局，agent 无需询问。
+
+### config.json（skill 根目录，全局用户配置）
+
+```json
+{
+  "python": "python3",
+  "user": { "name": "", "institution": "", "email": "" },
+  "styles": {
+    "fonts": { "body_cn": "宋体", "body_en": "Times New Roman" },
+    "sizes": { "body": 12, "heading1": 14 },
+    "page": { "paper": "A4" },
+    "spacing": { "body_line": 1.5 }
+  }
+}
+```
+
+### 项目级 .vibedocx/config.json（仅存与全局不同的字段）
+
+```json
+{
+  "styles": { "fonts": { "body_cn": "仿宋" } }
+}
+```
+
+### Agent 持久化行为
+
+Agent 应在以下时机**主动建议**用户存储偏好：
+
+| 触发场景 | 存入位置 | 示例 |
+|---|---|---|
+| 首次使用 vibedocx | 全局 `config.json` → `python` | Python 路径 |
+| 反复指定相同样式偏好 | 全局 `config.json` → `styles` | "你多次用黑体做标题字体，要设默认吗？" |
+| 用户提到个人信息 | 全局 `config.json` → `user` | 姓名、单位 |
+| 用户请求与全局配置冲突 | **提议**创建项目级 `.vibedocx/config.json` | "这个项目用仿宋，与全局宋体不同，按项目存储？" |
+
+不应打扰用户：一次性操作、用户已拒绝过同类存储、项目级已存在。
 
 ### 引用数据
 
@@ -90,9 +124,20 @@ Agent应该判断用户意图是否需要写入持久化配置文件，以及写
 
 每次操作前自动备份输入文件为 `<filename>.vibedocx_backup`，操作成功自动删除。若残留 `.vibedocx_backup` 文件表示上次操作失败。
 
+## Python 环境
+
+首次使用时 agent 按以下顺序确定 Python 路径：
+
+1. **检查 config.json**: 若 skill 根目录 `config.json` 中存在 `python` 字段，直接使用
+2. **询问用户**: 若未存储，询问用户是否有指定的 Python 路径
+3. **自动探测**: 用户不指定时 agent 自行选择（优先 `.venv/`，其次 `python3`/`python`）
+4. **持久化**: 确定后写入 `config.json`
+
+每次执行 CLI 使用该路径：`{python} scripts/vibedocx.py <command>`
+
 ## Dependencies
 
-- **python-docx**: `pip install python-docx` (document creation and editing)
-- **lxml**: `pip install lxml` (XML manipulation for footnotes, fields, notes parts)
+- **python-docx**: `pip install python-docx`
+- **lxml**: `pip install lxml`
 
-若导入失败，agent 应自动执行 `pip install python-docx lxml`。
+若导入失败，agent 使用上述确定的 Python 环境自动安装缺失的依赖。
