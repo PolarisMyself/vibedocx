@@ -82,7 +82,7 @@ CLI: `python scripts/vibedocx.py <command> <args>`
 }
 ```
 
-### 项目级 .vibedocx/config.json（仅存与全局不同的字段）
+### 项目级 <project>/.vibedocx/config.json（项目特定配置偏好）
 
 ```json
 {
