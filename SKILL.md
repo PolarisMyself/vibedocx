@@ -6,10 +6,8 @@ description: >
   Use when the user wants to: create .docx from scratch, format documents
   (fonts, styles, spacing, alignment), inspect structure/styles/content,
   manage citations and bibliographies, insert tables/images/TOC/equations/
-  footnotes, or do find-and-replace / block operations. 
-Triggers: 
-  "docx", "Word文档", "论文", "报告", "模板", "排版", "参考文献".
-  For PDF export, comments, or tracked changes, use the docx skill.
+  footnotes, or do find-and-replace / block operations.
+  Triggers on: "docx", "Word文档", "论文", "报告", "模板", "排版", "参考文献".
 license: MIT. See LICENSE.txt for complete terms.
 ---
 
@@ -48,18 +46,6 @@ CLI: `python scripts/vibedocx.py <command> <args>`
 **Other**: `merge <files> -o out.docx` / `style --export|--import` / `note convert`
 
 详细命令参考见 [docs/cli.md](docs/cli.md)。
-
-## 互补工具
-
-以下场景由 docx skill 覆盖，参见 `docx/SKILL.md`：
-
-| 场景 | docx 命令 |
-|------|----------|
-| PDF 导出 | `python docx/scripts/office/soffice.py --headless --convert-to pdf paper.docx` |
-| 文档验证 | `python docx/scripts/office/validate.py paper.docx` |
-| 添加批注 | `python docx/scripts/comment.py unpacked_dir/ 0 "text"` |
-| 接受修订 | `python docx/scripts/accept_changes.py input.docx output.docx` |
-| .doc→.docx | `python docx/scripts/office/soffice.py --headless --convert-to docx old.doc` |
 
 ## 设计原则
 
